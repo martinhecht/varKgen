@@ -14,7 +14,7 @@ stationary_cov(Fmat, Qmat, method = c("kron", "iterate"),
   \item{maxit}{Maximum iterations for \code{method = "iterate"}.}
 }
 \value{
-The stationary covariance \code{P} solving \code{P = F P F' + Q}, or
+The stationary covariance \code{P} solving \code{P = F P Ftrans + Q}, or
 \code{NULL} if no reliable solution was found (e.g. unstable \code{F}).
 }
 \description{

@@ -72,6 +72,18 @@ stationary_cov <- function(Fmat, Qmat, method = c("kron", "iterate"),
             all(is.finite(Fmat)), all(is.finite(Qmat)))
   d <- nrow(Fmat)
 
+  # A finite, positive semi-definite stationary covariance exists only if the
+  # system is stable, i.e. every eigenvalue of Fmat has modulus < 1. Without
+  # this guard the Kronecker solve can return a spurious algebraic solution:
+  # for an unstable Fmat the equation P = F P F' + Q still has a solution
+  # (whenever no eigenvalue product equals 1), but that solution is not a valid
+  # covariance and the residual check does not catch it. The check costs one
+  # d x d eigendecomposition, negligible next to the d^2 x d^2 Kronecker solve;
+  # it also short-circuits the "iterate" method for unstable systems instead of
+  # letting it diverge to Inf.
+  eig <- eigen(Fmat, only.values = TRUE)$values
+  if (!all(is.finite(eig)) || max(Mod(eig)) >= 1) return(NULL)
+
   if (method == "kron") {
     A <- diag(d * d) - kronecker(Fmat, Fmat)
     vecP <- tryCatch(solve(A, as.vector(Qmat)), error = function(e) NULL)
