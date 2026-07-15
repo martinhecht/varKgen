@@ -1,0 +1,16 @@
+# Hand-written NAMESPACE (consistent with the roxygen comments in R/;
+# running devtools::document() will regenerate an equivalent file).
+export(calibrate_varK)
+export(coeffs_delta)
+export(default_theta0)
+export(fit_clpm_ols)
+export(implied_clpm_profile)
+export(make_delta_pairs_overlapping)
+export(make_mats_varK)
+export(simulate_panel_stationary)
+export(stationary_cov)
+export(verify_varK)
+S3method(print, varK_calibration)
+importFrom(stats, optim)
+importFrom(stats, rnorm)
+importFrom(stats, lm.fit)

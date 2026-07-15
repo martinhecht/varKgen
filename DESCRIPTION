@@ -1,0 +1,22 @@
+Package: varKgen
+Type: Package
+Title: Calibrated VAR(K) Data-Generating Processes for Interval-Specific
+    Cross-Lagged Effects
+Version: 0.1.0
+Authors@R: person("Martin", "Hecht", role = c("aut", "cre"),
+    email = "martin.hecht@hsu-hh.de")
+Description: Tools to construct bivariate VAR(K) data-generating processes
+    whose model-implied population cross-lagged panel model (CLPM)
+    coefficients across time intervals delta = 1, ..., delta_max match
+    user-specified target profiles ("varK generator"). Includes the
+    companion-form construction, an exact stationary covariance solver,
+    computation of implied interval-specific coefficients, multi-start
+    Nelder-Mead calibration with optional BFGS polishing and parallel
+    restarts, stationary panel data simulation, and OLS-based verification
+    utilities.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Imports: stats, parallel
+Suggests: testthat (>= 3.0.0)
+Config/testthat/edition: 3
+RoxygenNote: 7.3.2
