@@ -1,13 +1,21 @@
 # ---------------------------------------------------------------------------
-# Reproduce the analysis of simulation_script_20260222.R with varKgen
+# Re-run the analysis of simulation_script_20260222.R with varKgen >= 0.2.0
 # ---------------------------------------------------------------------------
-# Settings, seeds and workflow match the original script. Results are
-# numerically equivalent but not bit-identical:
-#   - the stationary covariance is solved exactly (Kronecker) instead of by
-#     fixed-point iteration, so Nelder-Mead paths can differ in the last
-#     decimals;
-#   - simulation draws use Cholesky factors instead of MASS::mvrnorm, so the
-#     verification data differ for the same seed (identical distribution).
+# Settings, seeds and workflow follow the original script where possible.
+# Two structural differences to the original are unavoidable in >= 0.2.0:
+#   - The process error correlation is no longer a free calibration
+#     parameter: the full 2 x 2 covariance is always set by the user
+#     (var1, var2, cov12) and interpreted according to var_type. Below it is
+#     fixed at cov12 = 0 in "process_error" mode, which corresponds to the
+#     original problem restricted to uncorrelated process errors. If the
+#     original calibration found a non-zero error correlation, results will
+#     differ accordingly; set cov12 to that value to match more closely.
+#   - The number of free parameters is therefore 4K - 2 (was 4K - 1), and
+#     jittered start vectors are shorter, so optimization paths differ.
+# In addition, as before: the stationary covariance is solved exactly
+# (Kronecker) instead of by fixed-point iteration, and simulation draws use
+# Cholesky factors, so results are numerically equivalent but not
+# bit-identical to the original script.
 # ---------------------------------------------------------------------------
 
 library(varKgen)
@@ -32,6 +40,8 @@ sol <- calibrate_varK(
   K = K,
   alpha11_1 = alpha11_1,
   alpha22_1 = alpha22_1,
+  var1 = 1, var2 = 1, cov12 = 0,      # process error covariance, see header
+  var_type = "process_error",
   stab_thresh = 0.998,
   restarts = 120,
   maxit = 25000,

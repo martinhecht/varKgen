@@ -1,5 +1,6 @@
 test_that("for K = 1 and delta = 1 the implied CLPM equals the VAR(1) matrix", {
-  m <- make_mats_varK(ax = 0.6, ay = 0.5, b21 = 0.15, b12 = 0.1, cov_ue = 0.2)
+  m <- make_mats_varK(ax = 0.6, ay = 0.5, b21 = 0.15, b12 = 0.1,
+                      pe_cov12 = 0.2)
   P <- stationary_cov(m$F, m$Q)
   cd <- coeffs_delta(m$F, P, 1)
   expect_equal(unname(cd["b11"]), 0.60, tolerance = 1e-10)

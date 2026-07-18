@@ -28,7 +28,8 @@ matpow <- function(A, k) {
 #'
 #' Solves the discrete-time Lyapunov equation \code{P = F P F' + Q} for the
 #' stationary state covariance \code{P} of the system
-#' \code{s_t = F s_{t-1} + eta_t}, \code{Var(eta_t) = Q}.
+#' \code{s_t = F s_{t-1} + eta_t}, where \code{Q = Var(eta_t)} is the process
+#' error covariance.
 #'
 #' @details
 #' Two methods are available:
@@ -49,7 +50,7 @@ matpow <- function(A, k) {
 #' solved reliably (e.g., because \code{F} is not stable).
 #'
 #' @param Fmat Square transition matrix of the system.
-#' @param Qmat Innovation covariance matrix (same dimension as \code{Fmat}).
+#' @param Qmat Process error covariance matrix (same dimension as \code{Fmat}).
 #' @param method Either \code{"kron"} (exact, default) or \code{"iterate"}.
 #' @param tol Convergence tolerance for \code{method = "iterate"}.
 #' @param maxit Maximum number of iterations for \code{method = "iterate"}.
@@ -105,6 +106,95 @@ stationary_cov <- function(Fmat, Qmat, method = c("kron", "iterate"),
     P <- P_new
   }
   NULL
+}
+
+#' Process error covariance for a target stationary process covariance
+#'
+#' Internal. Given a stable companion transition matrix \code{Fmat}, finds the
+#' 2 x 2 process error covariance \code{Q2} such that the stationary state
+#' covariance \code{P} of the system \code{s_t = F s_{t-1} + eta_t} (with
+#' \code{Var(eta_t)} equal to \code{Q2} embedded in the top-left block and
+#' zeros elsewhere) has \code{P[1, 1] = var1}, \code{P[2, 2] = var2} and
+#' \code{P[1, 2] = cov12}.
+#'
+#' @details
+#' The stationary covariance is linear in the process error covariance, so the
+#' three unknowns (both error variances and the error covariance) solve a
+#' 3 x 3 linear system built from the Lyapunov responses to the three basis
+#' components of \code{Q2}. One LU factorization of
+#' \code{I - F \%x\% F} with three right-hand sides yields the responses; the
+#' full stationary covariance follows by linearity without a further solve.
+#' The achieved target block is verified to within a small relative tolerance.
+#'
+#' The derived \code{Q2} is not guaranteed to be positive semi-definite: not
+#' every target process covariance is admissible for given dynamics. The
+#' smallest eigenvalue of \code{Q2} (closed form for the symmetric 2 x 2 case)
+#' is returned so that callers can penalize or reject inadmissible points.
+#'
+#' @param Fmat Stable companion transition matrix (2K x 2K, K >= 1).
+#' @param var1 Target stationary variance of process 1 (\code{P[1, 1]}).
+#' @param var2 Target stationary variance of process 2 (\code{P[2, 2]}).
+#' @param cov12 Target stationary covariance (\code{P[1, 2]}).
+#'
+#' @return \code{NULL} if \code{Fmat} is unstable or the linear solves fail;
+#'   otherwise a list with \code{Q2} (2 x 2 derived process error
+#'   covariance), \code{P} (full stationary state covariance, symmetrized)
+#'   and \code{min_eig} (smallest eigenvalue of \code{Q2}; negative values
+#'   indicate an inadmissible target).
+#' @keywords internal
+solve_process_error <- function(Fmat, var1, var2, cov12) {
+  stopifnot(is.matrix(Fmat), nrow(Fmat) == ncol(Fmat), nrow(Fmat) >= 2L,
+            all(is.finite(Fmat)),
+            length(var1) == 1L, is.finite(var1),
+            length(var2) == 1L, is.finite(var2),
+            length(cov12) == 1L, is.finite(cov12))
+  d <- nrow(Fmat)
+
+  eig <- eigen(Fmat, only.values = TRUE)$values
+  if (!all(is.finite(eig)) || max(Mod(eig)) >= 1) return(NULL)
+
+  A <- diag(d * d) - kronecker(Fmat, Fmat)
+
+  # basis right-hand sides: vec of the three symmetric basis components of the
+  # top-left 2 x 2 block (column-major vec, as in as.vector())
+  B <- matrix(0, d * d, 3L)
+  E <- matrix(0, d, d); E[1L, 1L] <- 1
+  B[, 1L] <- as.vector(E)
+  E <- matrix(0, d, d); E[2L, 2L] <- 1
+  B[, 2L] <- as.vector(E)
+  E <- matrix(0, d, d); E[1L, 2L] <- 1; E[2L, 1L] <- 1
+  B[, 3L] <- as.vector(E)
+
+  V <- tryCatch(solve(A, B), error = function(e) NULL)
+  if (is.null(V) || !all(is.finite(V))) return(NULL)
+
+  # rows of vec(P) corresponding to P[1,1], P[2,2], P[1,2] (column-major)
+  i11 <- 1L
+  i22 <- d + 2L
+  i12 <- d + 1L
+  M <- V[c(i11, i22, i12), , drop = FALSE]
+
+  q <- tryCatch(solve(M, c(var1, var2, cov12)), error = function(e) NULL)
+  if (is.null(q) || !all(is.finite(q))) return(NULL)
+
+  vecP <- as.vector(V %*% q)
+  P <- matrix(vecP, d, d)
+  P <- (P + t(P)) / 2
+
+  Q2 <- matrix(c(q[1L], q[3L], q[3L], q[2L]), 2L, 2L)
+
+  # verify the achieved target block
+  achieved <- c(P[1L, 1L], P[2L, 2L], P[1L, 2L])
+  ref <- max(1, abs(var1), abs(var2), abs(cov12), max(abs(P)))
+  if (max(abs(achieved - c(var1, var2, cov12))) > 1e-6 * ref) return(NULL)
+
+  # smallest eigenvalue of the symmetric 2 x 2 Q2 in closed form
+  tr <- Q2[1L, 1L] + Q2[2L, 2L]
+  dt <- Q2[1L, 1L] * Q2[2L, 2L] - Q2[1L, 2L]^2
+  disc <- max(tr * tr - 4 * dt, 0)
+  min_eig <- (tr - sqrt(disc)) / 2
+
+  list(Q2 = Q2, P = P, min_eig = min_eig)
 }
 
 #' Cholesky factor for (possibly borderline) positive semi-definite matrices

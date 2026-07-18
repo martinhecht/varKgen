@@ -18,7 +18,8 @@ Simulates \code{N} independent persons over \code{T_obs} time points,
 starting from the stationary distribution so that no burn-in is required.
 }
 \details{
-Multivariate normal draws use Cholesky factors computed once instead of
+Multivariate normal draws use Cholesky factors computed once (for the
+initial state and for the 2 x 2 process error covariance) instead of
 \code{MASS::mvrnorm} per time step. The MASS dependency is removed; the
 random number stream differs from the original script for the same seed,
 while the distribution of the simulated data is identical.

@@ -8,7 +8,7 @@
 #' @details
 #' Compared to the original script, the multivariate normal draws use a
 #' Cholesky factor computed once (for the initial state and once for the
-#' 2 x 2 innovation covariance) instead of calling \code{MASS::mvrnorm} in
+#' 2 x 2 process error covariance) instead of calling \code{MASS::mvrnorm} in
 #' every time step (which performs an eigendecomposition per call). This
 #' removes the MASS dependency and speeds up large simulations. Note that the
 #' random number stream therefore differs from the original script for the
@@ -53,7 +53,7 @@ simulate_panel_stationary <- function(N, T_obs, mats, P_stationary, seed = NULL)
   if (!is.null(seed)) set.seed(seed)
 
   L_P <- chol_psd(P_stationary)                       # t(L_P) %*% L_P = P
-  L_Q <- chol_psd(Qmat[1:2, 1:2, drop = FALSE])       # innovation covariance
+  L_Q <- chol_psd(Qmat[1:2, 1:2, drop = FALSE])       # process error covariance
 
   # initial states from the stationary distribution
   S <- matrix(rnorm(N * dimS), N, dimS) %*% L_P

@@ -4,7 +4,9 @@
 \title{Calibrate a VAR(K) data-generating process to target cross-lag profiles}
 \usage{
 calibrate_varK(targets_b21, targets_b12, K, alpha11_1, alpha22_1,
-               var_u = 1, var_e = 1, theta0 = NULL, stab_thresh = 0.998,
+               var1 = 1, var2 = 1, cov12 = 0,
+               var_type = c("process", "process_error"),
+               theta0 = NULL, stab_thresh = 0.998,
                restarts = 120L, maxit = 25000L, jitter_sd = 0.10,
                early_tol = 1e-10, seed = 1L, polish = TRUE,
                parallel = FALSE, cores = NULL, verbose = TRUE)
@@ -19,8 +21,15 @@ calibrate_varK(targets_b21, targets_b12, K, alpha11_1, alpha22_1,
   \item{K}{Number of lags of the VAR(K) data-generating process.}
   \item{alpha11_1, alpha22_1}{Fixed lag-1 autoregressive coefficients of
     the DGP (not the implied CLPM autoregressions).}
-  \item{var_u, var_e}{Innovation variances (default 1).}
-  \item{theta0}{Optional start vector of length \code{4K - 1}; defaults to
+  \item{var1, var2}{Variances (both default 1), interpreted according to
+    \code{var_type}; must be positive.}
+  \item{cov12}{Covariance (default 0), interpreted according to
+    \code{var_type}; must satisfy \code{cov12^2 < var1 * var2}.}
+  \item{var_type}{\code{"process"} (default): \code{var1}, \code{var2},
+    \code{cov12} fix the stationary process covariance (top-left 2 x 2 block
+    of \code{P}); the process error covariance is derived internally.
+    \code{"process_error"}: they fix the process error covariance directly.}
+  \item{theta0}{Optional start vector of length \code{4K - 2}; defaults to
     \code{\link{default_theta0}}.}
   \item{stab_thresh}{Stability threshold for the spectral radius.}
   \item{restarts}{Number of jittered Nelder-Mead restarts.}
@@ -43,23 +52,39 @@ calibrate_varK(targets_b21, targets_b12, K, alpha11_1, alpha22_1,
 \value{
 An object of class \code{"varK_calibration"}: a list with elements
 \code{theta}, \code{loss}, \code{implied} (4 x delta_max matrix, rows
-\code{b11}, \code{b21}, \code{b22}, \code{b12}), \code{params},
-\code{mats}, \code{P}, \code{targets_b21}, \code{targets_b12},
+\code{b11}, \code{b21}, \code{b22}, \code{b12}), \code{params} (\code{ax},
+\code{ay}, \code{b21}, \code{b12} plus the process error covariance actually
+used: \code{pe_var1}, \code{pe_var2}, \code{pe_cov12}), \code{mats},
+\code{P}, \code{process_cov} (achieved stationary process covariance, the
+top-left 2 x 2 block of \code{P}), \code{targets_b21}, \code{targets_b12},
 \code{settings}, \code{runtime_seconds}, \code{restart_log}.
 }
 \description{
 Multi-start Nelder-Mead search (optionally BFGS-polished) for VAR(K)
 parameters whose implied population cross-lagged CLPM coefficients match
-the supplied target profiles across intervals 1..delta_max.
+the supplied target profiles across intervals 1..delta_max. The
+contemporaneous 2 x 2 covariance is always fully specified via \code{var1},
+\code{var2}, \code{cov12}; \code{var_type} selects whether these values fix
+the stationary process covariance or the process error covariance.
 }
 \details{
-The loss is the sum of squared deviations of the implied \code{b21(delta)}
-and \code{b12(delta)} from the targets. With \code{2 * delta_max} targets
-and \code{4K - 1} free parameters, targets can in general only be matched
-approximately if \code{2 * delta_max > 4K - 1}. Loss values at stable
-points are identical to the original script; results are numerically
-equivalent but not bit-identical (exact instead of iterative Lyapunov
-solver, graded instead of flat instability penalty).
+With \code{var_type = "process"}, the required process error covariance is
+derived exactly in every loss evaluation by an internal linear solver (also
+for unequal variances). Setting \code{var1 = var2 = 1} fixes both process
+variances at one, so standardized and unstandardized cross-lagged
+coefficients coincide and target profiles can be specified in the
+standardized metric. Not every target process covariance is admissible for
+given dynamics; parameter values whose derived process error covariance is
+not positive semi-definite receive a graded penalty. With
+\code{var_type = "process_error"}, the stationary process covariance is a
+result and is returned as \code{process_cov}.
+
+The process error correlation is no longer a free calibration parameter, so
+the number of free parameters is \code{4K - 2} while the number of target
+values is \code{2 * delta_max}; if \code{2 * delta_max > 4K - 2}, targets
+can in general only be matched approximately. If the best loss is at the
+penalty level (>= 1e9), no stable and admissible solution was found and a
+warning is issued.
 }
 \examples{
 \donttest{
@@ -67,7 +92,10 @@ targets_b21 <- c(0.30, 0.25, 0.15, 0.12, 0.10)
 targets_b12 <- c(0.15, 0.20, 0.10, 0.10, 0.08)
 sol <- calibrate_varK(targets_b21, targets_b12, K = 3,
                       alpha11_1 = 0.5, alpha22_1 = 0.5,
+                      var1 = 1, var2 = 1, cov12 = 0,
+                      var_type = "process",
                       restarts = 10, maxit = 5000, verbose = FALSE)
 print(sol)
+sol$process_cov
 }
 }

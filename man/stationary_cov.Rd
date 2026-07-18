@@ -7,7 +7,7 @@ stationary_cov(Fmat, Qmat, method = c("kron", "iterate"),
 }
 \arguments{
   \item{Fmat}{Square transition matrix.}
-  \item{Qmat}{Innovation covariance (same dimension as \code{Fmat}).}
+  \item{Qmat}{Process error covariance (same dimension as \code{Fmat}).}
   \item{method}{\code{"kron"} (exact, default) or \code{"iterate"}
     (fixed-point iteration of the original script).}
   \item{tol}{Convergence tolerance for \code{method = "iterate"}.}
@@ -15,7 +15,8 @@ stationary_cov(Fmat, Qmat, method = c("kron", "iterate"),
 }
 \value{
 The stationary covariance \code{P} solving \code{P = F P Ftrans + Q}, or
-\code{NULL} if no reliable solution was found (e.g. unstable \code{F}).
+\code{NULL} if \code{Fmat} is not stable (spectral radius >= 1) or no
+reliable solution was found.
 }
 \description{
 Solves the discrete-time Lyapunov equation for the stationary state

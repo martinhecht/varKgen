@@ -1,6 +1,7 @@
 test_that("simulation is reproducible with a seed", {
   m <- make_mats_varK(ax = c(0.5, 0.10), ay = c(0.4, 0.05),
-                      b21 = c(0.2, 0.05), b12 = c(0.1, 0.02), cov_ue = 0.2)
+                      b21 = c(0.2, 0.05), b12 = c(0.1, 0.02),
+                      pe_cov12 = 0.2)
   P <- stationary_cov(m$F, m$Q)
   s1 <- simulate_panel_stationary(500, 4, m, P, seed = 7)
   s2 <- simulate_panel_stationary(500, 4, m, P, seed = 7)
@@ -10,7 +11,8 @@ test_that("simulation is reproducible with a seed", {
 
 test_that("simulated data roughly match the stationary covariance", {
   m <- make_mats_varK(ax = c(0.5, 0.10), ay = c(0.4, 0.05),
-                      b21 = c(0.2, 0.05), b12 = c(0.1, 0.02), cov_ue = 0.2)
+                      b21 = c(0.2, 0.05), b12 = c(0.1, 0.02),
+                      pe_cov12 = 0.2)
   P <- stationary_cov(m$F, m$Q)
   s <- simulate_panel_stationary(20000, 3, m, P, seed = 1)
   # covariance of the last time point should be close to the stationary one

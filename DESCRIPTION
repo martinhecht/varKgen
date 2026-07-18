@@ -2,9 +2,9 @@ Package: varKgen
 Type: Package
 Title: Calibrated VAR(K) Data-Generating Processes for Interval-Specific
     Cross-Lagged Effects
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: person("Martin", "Hecht", role = c("aut", "cre"),
-    email = "martin.hecht@hsu-hh.de")
+    email = "martin.hecht@example.org")
 Description: Tools to construct bivariate VAR(K) data-generating processes
     whose model-implied population cross-lagged panel model (CLPM)
     coefficients across time intervals delta = 1, ..., delta_max match
