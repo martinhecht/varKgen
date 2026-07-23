@@ -54,6 +54,10 @@ matpow <- function(A, k) {
 #' @param method Either \code{"kron"} (exact, default) or \code{"iterate"}.
 #' @param tol Convergence tolerance for \code{method = "iterate"}.
 #' @param maxit Maximum number of iterations for \code{method = "iterate"}.
+#' @param check_stability If \code{TRUE} (default), the spectral radius of
+#'   \code{Fmat} is verified before solving. Set to \code{FALSE} only when
+#'   the caller has already established stability, to avoid a second
+#'   eigendecomposition per evaluation.
 #'
 #' @return The stationary covariance matrix \code{P}, or \code{NULL} if no
 #'   reliable solution was found.
@@ -65,12 +69,25 @@ matpow <- function(A, k) {
 #'
 #' @export
 stationary_cov <- function(Fmat, Qmat, method = c("kron", "iterate"),
-                           tol = 1e-12, maxit = 400000L) {
+                           tol = 1e-12, maxit = 400000L,
+                           check_stability = TRUE) {
   method <- match.arg(method)
   stopifnot(is.matrix(Fmat), is.matrix(Qmat),
             nrow(Fmat) == ncol(Fmat),
             all(dim(Fmat) == dim(Qmat)),
-            all(is.finite(Fmat)), all(is.finite(Qmat)))
+            all(is.finite(Fmat)), all(is.finite(Qmat)),
+            length(tol) == 1L, is.finite(tol), tol > 0,
+            length(maxit) == 1L, is.finite(maxit), maxit >= 1L,
+            maxit == round(maxit),
+            length(check_stability) == 1L, is.logical(check_stability),
+            !is.na(check_stability))
+  # Qmat must be a covariance matrix; symmetry is checked here, positive
+  # semi-definiteness remains the caller's responsibility (an eigen-
+  # decomposition per call would be too costly inside the loss function)
+  q_scale <- max(1e-300, max(abs(Qmat)))
+  if (max(abs(Qmat - t(Qmat))) > 1e-10 * q_scale) {
+    stop("'Qmat' is not symmetric.", call. = FALSE)
+  }
   d <- nrow(Fmat)
 
   # A finite, positive semi-definite stationary covariance exists only if the
@@ -82,8 +99,10 @@ stationary_cov <- function(Fmat, Qmat, method = c("kron", "iterate"),
   # d x d eigendecomposition, negligible next to the d^2 x d^2 Kronecker solve;
   # it also short-circuits the "iterate" method for unstable systems instead of
   # letting it diverge to Inf.
-  eig <- eigen(Fmat, only.values = TRUE)$values
-  if (!all(is.finite(eig)) || max(Mod(eig)) >= 1) return(NULL)
+  if (check_stability) {
+    eig <- eigen(Fmat, only.values = TRUE)$values
+    if (!all(is.finite(eig)) || max(Mod(eig)) >= 1) return(NULL)
+  }
 
   if (method == "kron") {
     A <- diag(d * d) - kronecker(Fmat, Fmat)
@@ -92,7 +111,9 @@ stationary_cov <- function(Fmat, Qmat, method = c("kron", "iterate"),
     P <- matrix(vecP, d, d)
     P <- (P + t(P)) / 2
     resid <- max(abs(P - Fmat %*% P %*% t(Fmat) - Qmat))
-    ref <- max(1, max(abs(Qmat)), max(abs(P)))
+    # relative reference with a machine-level absolute floor, so the check
+    # stays meaningful for covariance scales far below 1
+    ref <- max(.Machine$double.eps, max(abs(Qmat)), max(abs(P)))
     if (!is.finite(resid) || resid > 1e-6 * ref) return(NULL)
     return(P)
   }
@@ -135,6 +156,10 @@ stationary_cov <- function(Fmat, Qmat, method = c("kron", "iterate"),
 #' @param var1 Target stationary variance of process 1 (\code{P[1, 1]}).
 #' @param var2 Target stationary variance of process 2 (\code{P[2, 2]}).
 #' @param cov12 Target stationary covariance (\code{P[1, 2]}).
+#' @param check_stability If \code{TRUE} (default), the spectral radius of
+#'   \code{Fmat} is verified before solving. Set to \code{FALSE} only when
+#'   the caller has already established stability, to avoid a second
+#'   eigendecomposition per evaluation.
 #'
 #' @return \code{NULL} if \code{Fmat} is unstable or the linear solves fail;
 #'   otherwise a list with \code{Q2} (2 x 2 derived process error
@@ -142,16 +167,21 @@ stationary_cov <- function(Fmat, Qmat, method = c("kron", "iterate"),
 #'   and \code{min_eig} (smallest eigenvalue of \code{Q2}; negative values
 #'   indicate an inadmissible target).
 #' @keywords internal
-solve_process_error <- function(Fmat, var1, var2, cov12) {
+solve_process_error <- function(Fmat, var1, var2, cov12,
+                                check_stability = TRUE) {
   stopifnot(is.matrix(Fmat), nrow(Fmat) == ncol(Fmat), nrow(Fmat) >= 2L,
             all(is.finite(Fmat)),
             length(var1) == 1L, is.finite(var1),
             length(var2) == 1L, is.finite(var2),
-            length(cov12) == 1L, is.finite(cov12))
+            length(cov12) == 1L, is.finite(cov12),
+            length(check_stability) == 1L, is.logical(check_stability),
+            !is.na(check_stability))
   d <- nrow(Fmat)
 
-  eig <- eigen(Fmat, only.values = TRUE)$values
-  if (!all(is.finite(eig)) || max(Mod(eig)) >= 1) return(NULL)
+  if (check_stability) {
+    eig <- eigen(Fmat, only.values = TRUE)$values
+    if (!all(is.finite(eig)) || max(Mod(eig)) >= 1) return(NULL)
+  }
 
   A <- diag(d * d) - kronecker(Fmat, Fmat)
 
@@ -183,41 +213,87 @@ solve_process_error <- function(Fmat, var1, var2, cov12) {
 
   Q2 <- matrix(c(q[1L], q[3L], q[3L], q[2L]), 2L, 2L)
 
-  # verify the achieved target block
+  # verify the achieved target block (relative, with a machine-level floor)
   achieved <- c(P[1L, 1L], P[2L, 2L], P[1L, 2L])
-  ref <- max(1, abs(var1), abs(var2), abs(cov12), max(abs(P)))
+  ref <- max(.Machine$double.eps, abs(var1), abs(var2), abs(cov12),
+             max(abs(P)))
   if (max(abs(achieved - c(var1, var2, cov12))) > 1e-6 * ref) return(NULL)
 
-  # smallest eigenvalue of the symmetric 2 x 2 Q2 in closed form
-  tr <- Q2[1L, 1L] + Q2[2L, 2L]
-  dt <- Q2[1L, 1L] * Q2[2L, 2L] - Q2[1L, 2L]^2
-  disc <- max(tr * tr - 4 * dt, 0)
-  min_eig <- (tr - sqrt(disc)) / 2
+  # the target-block check alone can miss an inadequate full solution for
+  # ill-conditioned systems, so verify the complete Lyapunov equation
+  Qfull <- matrix(0, d, d)
+  Qfull[1:2, 1:2] <- Q2
+  resid <- max(abs(P - Fmat %*% P %*% t(Fmat) - Qfull))
+  ref_l <- max(.Machine$double.eps, max(abs(Qfull)), max(abs(P)))
+  if (!is.finite(resid) || resid > 1e-6 * ref_l) return(NULL)
+
+  # smallest eigenvalue of the symmetric 2 x 2 Q2; the closed form can
+  # overflow for extreme entries, so use the symmetric eigensolver
+  ev_q <- eigen(Q2, symmetric = TRUE, only.values = TRUE)$values
+  if (!all(is.finite(ev_q))) return(NULL)
+  min_eig <- min(ev_q)
 
   list(Q2 = Q2, P = P, min_eig = min_eig)
 }
 
-#' Cholesky factor for (possibly borderline) positive semi-definite matrices
+#' Symmetric factor of a positive semi-definite covariance matrix
 #'
-#' Internal helper. Symmetrizes the input and, if a plain Cholesky
-#' factorization fails, retries with a small diagonal jitter. Used for drawing
-#' multivariate normal variates without depending on MASS.
+#' Internal helper. Returns a matrix \code{L} with
+#' \code{t(L) \%*\% L = M_used}, so that \code{Z \%*\% L} has covariance
+#' \code{M_used} for \code{Z} with independent standard normal entries.
 #'
-#' @param M A symmetric positive (semi-)definite matrix.
-#' @param jitter Initial jitter added to the diagonal on failure.
+#' @details
+#' A Cholesky factorization is not used because \code{chol()} fails for
+#' exactly singular positive semi-definite matrices, and repairing this with
+#' a diagonal jitter would silently simulate from \code{M + epsilon * I}
+#' instead of \code{M}. Singular covariance matrices are reachable here:
+#' \code{\link{make_mats_varK}} admits
+#' \code{abs(pe_cov12) = sqrt(pe_var1 * pe_var2)}, and calibrated process
+#' error covariances can be numerically near-singular.
 #'
-#' @return Upper-triangular matrix \code{R} with \code{t(R) \%*\% R}
-#'   (approximately) equal to \code{M}.
+#' The symmetric eigendecomposition is used instead. \code{M_used} is the
+#' symmetrized matrix \code{(M + t(M)) / 2} with negative eigenvalues
+#' truncated to zero. Negative eigenvalues below \code{-tol * scale}, where
+#' \code{scale} is the largest absolute eigenvalue, are rejected with an
+#' error; only negative eigenvalues at the level of numerical noise are
+#' truncated. The tolerance is therefore purely relative, and for a matrix
+#' that is positive semi-definite up to roundoff the factorization is exact
+#' to within that roundoff. The applied correction, i.e. the magnitude of
+#' the most negative truncated eigenvalue, is attached as the attribute
+#' \code{"psd_correction"} so that callers can disclose it; it is zero
+#' whenever no truncation was needed. The returned factor is not triangular,
+#' which is irrelevant here: only the covariance decomposition matters.
+#'
+#' @param M Symmetric covariance matrix.
+#' @param tol Relative tolerance for negative eigenvalues, measured against
+#'   the largest absolute eigenvalue.
+#'
+#' @return A matrix \code{L} with \code{t(L) \%*\% L = M_used}, carrying
+#'   the attribute \code{"psd_correction"}.
 #' @keywords internal
-chol_psd <- function(M, jitter = 1e-10) {
+cov_factor_psd <- function(M, tol = 1e-10) {
+  stopifnot(is.matrix(M), nrow(M) == ncol(M), nrow(M) >= 1L,
+            all(is.finite(M)),
+            length(tol) == 1L, is.numeric(tol), is.finite(tol), tol >= 0)
   M <- (M + t(M)) / 2
-  out <- tryCatch(chol(M), error = function(e) NULL)
-  if (!is.null(out)) return(out)
-  d <- nrow(M)
-  scale <- max(abs(diag(M)), 1e-12)
-  for (j in c(jitter, 1e-8, 1e-6)) {
-    out <- tryCatch(chol(M + diag(j * scale, d)), error = function(e) NULL)
-    if (!is.null(out)) return(out)
+  ee <- eigen(M, symmetric = TRUE)
+  if (!all(is.finite(ee$values))) {
+    stop("Eigendecomposition of the covariance matrix failed.", call. = FALSE)
   }
-  stop("Cholesky factorization failed; covariance matrix is not positive semi-definite.")
+  scale <- max(abs(ee$values))
+  if (scale == 0) {
+    L <- matrix(0, nrow(M), ncol(M))
+    attr(L, "psd_correction") <- 0
+    return(L)
+  }
+  if (min(ee$values) < -tol * scale) {
+    stop("Covariance matrix is not positive semi-definite (smallest ",
+         "eigenvalue ", format(min(ee$values), digits = 3),
+         ", relative to scale ", format(scale, digits = 3), ").",
+         call. = FALSE)
+  }
+  values <- pmax(ee$values, 0)
+  L <- diag(sqrt(values), nrow = length(values)) %*% t(ee$vectors)
+  attr(L, "psd_correction") <- max(0, -min(ee$values))
+  L
 }

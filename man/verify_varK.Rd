@@ -16,14 +16,23 @@ verify_varK(calibration, N, T_obs, deltas = NULL, seed = NULL,
     element \code{sim}.}
 }
 \value{
-List with \code{estimates} (4 x length(deltas) matrix) and \code{table}
+List with \code{estimates} (4 x length(deltas) matrix), \code{table}
 (data frame with targets, implied values, estimates and differences per
-interval).
+interval; the autoregressive columns carry implied values and estimates,
+since autoregressive targets are defined only at \code{Delta_1}) and
+\code{ar1} (one-row data frame for the first target interval
+\code{Delta_1 = 1} time unit, with \code{target_b11_1},
+\code{implied_b11_1}, \code{estimated_b11_1}, the corresponding \code{b22}
+triple and their differences). The interval of one time unit is always
+evaluated for \code{ar1}, even if \code{1} is not contained in
+\code{deltas}; this requires \code{T_obs > 1}.
 }
 \description{
 Simulates one stationary panel, fits the interval-specific CLPM
 regressions by pooled OLS, and tabulates estimates against both targets
-and implied population values.
+and implied population values. The autoregressive projection effects at a
+first target interval \code{Delta_1 = 1} time unit are compared separately
+in \code{ar1}.
 }
 \details{
 The comparison against the implied population coefficients isolates

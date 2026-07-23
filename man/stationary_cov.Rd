@@ -3,7 +3,7 @@
 \title{Stationary covariance of a stable linear system}
 \usage{
 stationary_cov(Fmat, Qmat, method = c("kron", "iterate"),
-               tol = 1e-12, maxit = 400000L)
+               tol = 1e-12, maxit = 400000L, check_stability = TRUE)
 }
 \arguments{
   \item{Fmat}{Square transition matrix.}
@@ -12,6 +12,10 @@ stationary_cov(Fmat, Qmat, method = c("kron", "iterate"),
     (fixed-point iteration of the original script).}
   \item{tol}{Convergence tolerance for \code{method = "iterate"}.}
   \item{maxit}{Maximum iterations for \code{method = "iterate"}.}
+  \item{check_stability}{If \code{TRUE} (default), the spectral radius of
+    \code{Fmat} is verified before solving. Set to \code{FALSE} only when
+    the caller has already established stability, to avoid a second
+    eigendecomposition per evaluation.}
 }
 \value{
 The stationary covariance \code{P} solving \code{P = F P Ftrans + Q}, or

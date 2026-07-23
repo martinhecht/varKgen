@@ -19,8 +19,10 @@
 #'   \code{\link{simulate_panel_stationary}}.
 #' @param delta Interval (positive integer smaller than \code{ncol(Y1)}).
 #'
-#' @return A data frame with columns \code{Y1_p}, \code{Y2_p}, \code{Y1_q},
-#'   \code{Y2_q} and \code{N * (T_obs - delta)} rows.
+#' @return A data frame with \code{N * (T_obs - delta)} rows and columns
+#'   \code{id} (person index), \code{p}, \code{q} (the two time indices),
+#'   \code{Y1_p}, \code{Y2_p}, \code{Y1_q} and \code{Y2_q}. \code{id}
+#'   makes the cluster-robust standard errors mentioned above usable.
 #'
 #' @export
 make_delta_pairs_overlapping <- function(Y1, Y2, delta) {
@@ -33,7 +35,11 @@ make_delta_pairs_overlapping <- function(Y1, Y2, delta) {
                  as.integer(delta), TT))
   }
   p0 <- seq_len(TT - delta)
+  N <- nrow(Y1)
   data.frame(
+    id = rep(seq_len(N), times = length(p0)),
+    p = rep(p0, each = N),
+    q = rep(p0 + delta, each = N),
     Y1_p = as.vector(Y1[, p0, drop = FALSE]),
     Y2_p = as.vector(Y2[, p0, drop = FALSE]),
     Y1_q = as.vector(Y1[, p0 + delta, drop = FALSE]),

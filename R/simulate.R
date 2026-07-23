@@ -7,7 +7,7 @@
 #'
 #' @details
 #' Compared to the original script, the multivariate normal draws use a
-#' Cholesky factor computed once (for the initial state and once for the
+#' exact symmetric PSD factor computed once (for the initial state and once for the
 #' 2 x 2 process error covariance) instead of calling \code{MASS::mvrnorm} in
 #' every time step (which performs an eigendecomposition per call). This
 #' removes the MASS dependency and speeds up large simulations. Note that the
@@ -26,7 +26,13 @@
 #' @param seed Optional seed set before drawing (default \code{NULL}: the
 #'   current RNG state is used).
 #'
-#' @return A list with \code{N x T_obs} matrices \code{Y1} and \code{Y2}.
+#' @return A list with \code{N x T_obs} matrices \code{Y1} and \code{Y2},
+#'   plus \code{psd_correction}, a named vector giving the positive
+#'   semi-definiteness correction applied to \code{P_stationary} and to the
+#'   process error block before factorization. Both entries are zero unless a
+#'   negative eigenvalue at the level of numerical noise had to be truncated;
+#'   a non-zero entry means the simulated model differs from the supplied
+#'   matrices by exactly that amount.
 #'
 #' @examples
 #' m <- make_mats_varK(ax = c(0.5, 0.1), ay = c(0.4, 0.05),
@@ -38,25 +44,57 @@
 #'
 #' @export
 simulate_panel_stationary <- function(N, T_obs, mats, P_stationary, seed = NULL) {
-  stopifnot(length(N) == 1L, N >= 1L, N == round(N),
-            length(T_obs) == 1L, T_obs >= 1L, T_obs == round(T_obs))
+  stopifnot(length(N) == 1L, is.finite(N), N >= 1L, N == round(N),
+            length(T_obs) == 1L, is.finite(T_obs), T_obs >= 1L,
+            T_obs == round(T_obs),
+            is.null(seed) ||
+              (length(seed) == 1L && is.finite(seed) &&
+                 seed == round(seed)))
   if (is.null(P_stationary)) {
     stop("Need stationary covariance 'P_stationary' for the initial draw.")
   }
   Fmat <- mats$F
   Qmat <- mats$Q
-  stopifnot(is.matrix(Fmat), nrow(Fmat) == ncol(Fmat),
+  stopifnot(is.matrix(Fmat), is.matrix(Qmat), is.matrix(P_stationary),
+            nrow(Fmat) == ncol(Fmat),
             all(dim(Qmat) == dim(Fmat)),
-            all(dim(P_stationary) == dim(Fmat)))
+            all(dim(P_stationary) == dim(Fmat)),
+            all(is.finite(Fmat)), all(is.finite(Qmat)),
+            all(is.finite(P_stationary)),
+            nrow(Fmat) >= 2L, nrow(Fmat) %% 2L == 0L)
+  # symmetry of the two covariance matrices
+  for (nm in c("Qmat", "P_stationary")) {
+    Mx <- get(nm)
+    sc <- max(.Machine$double.eps, max(abs(Mx)))
+    if (max(abs(Mx - t(Mx))) > 1e-10 * sc) {
+      stop("'", if (nm == "Qmat") "mats$Q" else nm, "' is not symmetric.",
+           call. = FALSE)
+    }
+  }
+  # only the top-left 2 x 2 block of Q drives the innovations; the remaining
+  # state components are pure shift registers, so anything else in Q would be
+  # silently ignored
+  Qrest <- Qmat
+  Qrest[1:2, 1:2] <- 0
+  if (max(abs(Qrest)) > 1e-10 * max(.Machine$double.eps, max(abs(Qmat)))) {
+    stop("'mats$Q' must be zero outside the top-left 2 x 2 block; the ",
+         "remaining state components of a bivariate VAR(K) companion form ",
+         "are deterministic shift registers.", call. = FALSE)
+  }
   dimS <- nrow(Fmat)
 
   if (!is.null(seed)) set.seed(seed)
 
-  L_P <- chol_psd(P_stationary)                       # t(L_P) %*% L_P = P
-  L_Q <- chol_psd(Qmat[1:2, 1:2, drop = FALSE])       # process error covariance
+  L_P <- cov_factor_psd(P_stationary)                 # t(L_P) %*% L_P = P
+  L_Q <- cov_factor_psd(Qmat[1:2, 1:2, drop = FALSE]) # process error covariance
+  # disclose any positive semi-definiteness correction that was applied, so
+  # that a validation study can tell whether the simulated model is exactly
+  # the one whose theoretical moments are reported
+  psd_correction <- c(P_stationary = attr(L_P, "psd_correction"),
+                      Q = attr(L_Q, "psd_correction"))
 
   # initial states from the stationary distribution
-  S <- matrix(rnorm(N * dimS), N, dimS) %*% L_P
+  S <- matrix(stats::rnorm(N * dimS), N, dimS) %*% L_P
 
   Y1 <- matrix(NA_real_, N, T_obs)
   Y2 <- matrix(NA_real_, N, T_obs)
@@ -67,11 +105,11 @@ simulate_panel_stationary <- function(N, T_obs, mats, P_stationary, seed = NULL)
     tF <- t(Fmat)
     for (p in 2L:T_obs) {
       S <- S %*% tF
-      S[, 1:2] <- S[, 1:2] + matrix(rnorm(2L * N), N, 2L) %*% L_Q
+      S[, 1:2] <- S[, 1:2] + matrix(stats::rnorm(2L * N), N, 2L) %*% L_Q
       Y1[, p] <- S[, 1L]
       Y2[, p] <- S[, 2L]
     }
   }
 
-  list(Y1 = Y1, Y2 = Y2)
+  list(Y1 = Y1, Y2 = Y2, psd_correction = psd_correction)
 }

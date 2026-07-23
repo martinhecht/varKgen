@@ -1,6 +1,7 @@
-# Hand-written NAMESPACE (consistent with the roxygen comments in R/).
-# Only rnorm is called unqualified; optim and lm.fit use the stats:: prefix
-# and therefore need no importFrom.
+# Consistent with the roxygen comments in R/ (regenerating with
+# devtools::document() reproduces this file). All calls into stats use the
+# stats:: prefix, so the importFrom below is a redundant safety net rather
+# than a requirement.
 export(calibrate_varK)
 export(coeffs_delta)
 export(default_theta0)
