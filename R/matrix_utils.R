@@ -26,7 +26,7 @@ matpow <- function(A, k) {
 
 #' Stationary covariance of a stable linear system
 #'
-#' Solves the discrete-time Lyapunov equation \code{P = F P F' + Q} for the
+#' Solves the discrete-time Lyapunov equation \code{P = F P t(F) + Q} for the
 #' stationary state covariance \code{P} of the system
 #' \code{s_t = F s_{t-1} + eta_t}, where \code{Q = Var(eta_t)} is the process
 #' error covariance.
@@ -40,7 +40,7 @@ matpow <- function(A, k) {
 #'     (d = 2K) and, unlike the fixed-point iteration, does not slow down as
 #'     the spectral radius of \code{F} approaches 1.}
 #'   \item{\code{"iterate"}}{The fixed-point iteration
-#'     \code{P <- F P F' + Q} used in the original script. Convergence is
+#'     \code{P <- F P t(F) + Q} used in the original script. Convergence is
 #'     linear with rate equal to the squared spectral radius of \code{F}, so
 #'     this can require thousands of iterations for highly persistent systems.
 #'     Kept for reference and cross-checking.}
@@ -93,7 +93,7 @@ stationary_cov <- function(Fmat, Qmat, method = c("kron", "iterate"),
   # A finite, positive semi-definite stationary covariance exists only if the
   # system is stable, i.e. every eigenvalue of Fmat has modulus < 1. Without
   # this guard the Kronecker solve can return a spurious algebraic solution:
-  # for an unstable Fmat the equation P = F P F' + Q still has a solution
+  # for an unstable Fmat the equation P = F P t(F) + Q still has a solution
   # (whenever no eigenvalue product equals 1), but that solution is not a valid
   # covariance and the residual check does not catch it. The check costs one
   # d x d eigendecomposition, negligible next to the d^2 x d^2 Kronecker solve;
